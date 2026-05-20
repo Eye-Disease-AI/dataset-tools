@@ -2,8 +2,6 @@ import argparse, json, re
 from collections import defaultdict
 from pathlib import Path
 
-from numpy import require
-
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
 
