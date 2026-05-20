@@ -22,10 +22,10 @@ def canon(p):
     return p, f"patient '{p}' has {len(p)} chars and no hyphen; needs manual fix"
 
 def pid(ids, p, d):
-    key = f'{p}:{d}'
-    if key not in ids: return None, f"no patient ID for {key} in JSON"
-    if ids[key] is None: return None, f"unresolved patient ID for {key} (null in JSON)"
-    return ids[key], None
+    sub = ids.get(p)
+    if sub is None or d not in sub: return None, f"no patient ID for {p} on {d} in JSON"
+    if sub[d] is None: return None, f"unresolved patient ID for {p} on {d} (null in JSON)"
+    return sub[d], None
 
 def plan(root, ids):
     for sub, noun in [('kwestionariusze', 'kwestionariusz'), ('zakresy', 'zakres')]:
