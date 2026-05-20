@@ -2,6 +2,9 @@
 import os, sys, getpass, pyzipper, datetime, tqdm
 
 EXCLUDE_EXT = {'.zip'}
+if len(sys.argv) != 2:
+    print(f"Usage: {sys.argv[0]} <data_root>")
+    exit(1)
 
 src = sys.argv[1]
 pw = getpass.getpass("Password: ").encode()

@@ -5,6 +5,9 @@ import pandas as pd
 
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
+if len(sys.argv) != 3:
+    print(f"Usage: {sys.argv[0]} <data_root> <output.csv>")
+    exit(1)
 
 def iso(s):
     m = DATE.search(s)
@@ -18,6 +21,7 @@ def patient(stem):
         if p.casefold() not in NOUNS and not iso(p): return p
 
 root = Path(sys.argv[1])
+out = Path(sys.argv[2])
 cov = defaultdict(lambda: defaultdict(set))   # cov[type][date] = {casefolded patient}
 date_covered = defaultdict(set)
 display = {}                                   # casefolded -> first-seen original

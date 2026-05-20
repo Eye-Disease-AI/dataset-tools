@@ -4,6 +4,10 @@ from pathlib import Path
 
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
+if len(sys.argv) != 2:
+    print(f"Usage: {sys.argv[0]} <data_root>")
+    exit(1)
+
 
 def iso(s):
     m = DATE.search(s)
