@@ -9,19 +9,25 @@ def iso(s):
     g = m.groups()
     return f"{g[3]}-{g[4]}-{g[5]}" if g[3] else f"{g[2]}-{g[1]}-{g[0]}"
 
+PID_RE = re.compile(r'p\d+')
+
 def patient(stem, noun):
     parts = stem.split('_')
-    for p in (parts[0], parts[-1]):
-        if p.casefold() not in {noun, noun + 'y'} and not iso(p): return p
+    for p in (parts[0], parts[-1], parts[-2] if len(parts) > 1 else ''):
+        if p and p.casefold() not in {noun, noun + 'y'} and not iso(p) and not PID_RE.fullmatch(p): return p
 
 def canon(p):
     if '-' in p: return p.upper(), None
     if len(p) == 2: return f'{p[0].upper()}-{p[1].upper()}', None
     return p, f"patient '{p}' has {len(p)} chars and no hyphen; needs manual fix"
 
-def plan(root):
-    """Yields (src, dst_relative_to_root, patient_or_None, date_or_None, problem_or_None)."""
-    # formularze/<date>/<sub>/<...>.jpg
+def pid(ids, p, d):
+    key = f'{p}:{d}'
+    if key not in ids: return None, f"no patient ID for {key} in JSON"
+    if ids[key] is None: return None, f"unresolved patient ID for {key} (null in JSON)"
+    return ids[key], None
+
+def plan(root, ids):
     for sub, noun in [('kwestionariusze', 'kwestionariusz'), ('zakresy', 'zakres')]:
         for f in root.glob(f'formularze/*/{sub}/*.jpg'):
             d = iso(f.parts[-3])
@@ -32,9 +38,10 @@ def plan(root):
             if not p: yield f, None, None, None, "no patient"; continue
             p, err = canon(p)
             if err: yield f, None, None, None, err; continue
-            yield f, Path(f'formularze/{d}/{sub}/{noun}_{d}_{p}.jpg'), p, d, None
+            i, err = pid(ids, p, d)
+            if err: yield f, None, p, d, err; continue
+            yield f, Path(f'formularze/{d}/{sub}/{noun}_{d}_{p}_{i}.jpg'), p, d, None
 
-    # formularze/<date>/detect[_verified].json (required)
     for date_dir in (root / 'formularze').glob('*'):
         if not date_dir.is_dir(): continue
         d = iso(date_dir.name)
@@ -44,7 +51,6 @@ def plan(root):
             if existing: yield existing, Path(f'formularze/{d}/{base}_{d}.json'), None, None, None
             else: yield date_dir / f'{name}.json', None, None, None, f"required {name}.json missing"
 
-    # notatki/<date>/<patient>.png
     for f in root.glob('notatki/*/*.[pP][nN][gG]'):
         d = iso(f.parts[-2])
         if not d: yield f, None, None, None, f"bad folder date {f.parts[-2]}"; continue
@@ -52,9 +58,10 @@ def plan(root):
         if not p: yield f, None, None, None, "no patient"; continue
         p, err = canon(p)
         if err: yield f, None, None, None, err; continue
-        yield f, Path(f'notatki/{d}/notatka_{d}_{p}.png'), p, d, None
+        i, err = pid(ids, p, d)
+        if err: yield f, None, p, d, err; continue
+        yield f, Path(f'notatki/{d}/notatka_{d}_{p}_{i}.png'), p, d, None
 
-    # kalendarze/<date>.{png,json}
     sch = {}
     for f in root.glob('kalendarze/*'):
         if f.suffix.lower() == '.zip' or not f.is_file(): continue
@@ -66,40 +73,47 @@ def plan(root):
             sch[d] = []
             for t, p_raw in appts:
                 p, err = canon(p_raw)
-                if err: yield f, None, None, None, f"in JSON: {err}"
-                else:
-                    yield f, None, p, d, None
-                    sch[d].append((t, p))
+                if err: yield f, None, None, None, f"in JSON: {err}"; continue
+                i, err = pid(ids, p, d)
+                if err: yield f, None, p, d, f"in JSON: {err}"; continue
+                yield f, None, p, d, None
+                sch[d].append((t, p, i))
 
-    # zdjecia/<date>/<...>.bmp
     for f in root.glob('zdjecia/*/*'):
         if not f.is_file() or f.suffix.lower() == '.zip': continue
         d = iso(f.parts[-2])
         if not d: continue
         rest = re.sub(r'^.*?\d{4}-\d{2}-\d{2}[ _-]*', '', f.stem).replace(' ', '_')
-        new_stem = f'zdjecie_{d}_{rest}' if rest else f'zdjecie_{d}'
-        if f.stem == new_stem: rest_ok = True
-        else: rest_ok = bool(rest)
         p = None
+        i = None
         if d in sch:
             m = re.search(r'(\d{2})-(\d{2})', rest)
             if m:
                 hhmm = f'{m.group(1)}:{m.group(2)}'
-                p = next((pp for t, pp in reversed(sch[d]) if t <= hhmm), None)
-                if not p: yield f, None, None, None, f"photo at {hhmm} before all appointments on {d}"; continue
+                hit = next(((pp, ii) for t, pp, ii in reversed(sch[d]) if t <= hhmm), None)
+                if not hit: yield f, None, None, None, f"photo at {hhmm} before all appointments on {d}"; continue
+                p, i = hit
+        suffix = f'_{i}' if i else ''
+        if rest.endswith(suffix) and suffix: rest = rest[:-len(suffix)]
+        new_stem = f'zdjecie_{d}_{rest}{suffix}' if rest else f'zdjecie_{d}{suffix}'
         yield f, Path(f'zdjecia/{d}/{new_stem}{f.suffix.lower()}'), p, d, None
-
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('data_root', type=Path)
     ap.add_argument('--fix', action='store_true')
+    ap.add_argument('--patients-csv', type=Path, dest='csv')
+    ap.add_argument('--ids', type=Path, default=Path('patient_ids.json'))
     args = ap.parse_args()
-    fix = args.fix
+    fix, csv = args.fix, args.csv
     root = args.data_root.resolve()
     new_root = root.parent / f'{root.name}_renamed'
+    if not args.ids.exists():
+        print(f'ERROR: {args.ids} not found; run assign_ids.py first', file=sys.stderr)
+        sys.exit(2)
+    ids = json.loads(args.ids.read_text())
 
-    records = list(plan(root))
+    records = list(plan(root, ids))
     problems = [(s, why) for s, _, _, _, why in records if why]
     renames = [(s, d) for s, d, _, _, why in records if why is None and d]
     needs = [(s, d) for s, d in renames if s.name != d.name]
@@ -121,6 +135,10 @@ def main():
         except ValueError: rel = s
         print(f'  ! {rel}  ({why})')
     for d, a, b in collisions: print(f'  X {d}  <- {a.relative_to(root)}  <- {b.relative_to(root)}')
+
+    if csv:
+        csv.write_text('initials,date\n' + ''.join(f'{p},{d}\n' for p, d in pairs))
+        print(f'wrote {csv}')
 
     if fix and not collisions and not new_root.exists():
         new_root.mkdir()
