@@ -1,12 +1,12 @@
 # pip install pyzipper tqdm
-import os, sys, getpass, pyzipper, datetime, tqdm
+import os, sys, getpass, pyzipper, datetime, tqdm, argparse
 
 EXCLUDE_EXT = {'.zip'}
-if len(sys.argv) != 2:
-    print(f"Usage: {sys.argv[0]} <data_root>")
-    exit(1)
+ap = argparse.ArgumentParser()
+ap.add_argument('data_root', required=True)
+args = ap.parse_args()
 
-src = sys.argv[1]
+src = args.data_root
 pw = getpass.getpass("Password: ").encode()
 out = src.rstrip('/\\') + '_' + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '.zip'
 

@@ -1,13 +1,10 @@
-import json, re, sys
+import argparse, json, re
 from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
-if len(sys.argv) != 3:
-    print(f"Usage: {sys.argv[0]} <data_root> <output.csv>")
-    exit(1)
 
 def iso(s):
     m = DATE.search(s)
@@ -20,11 +17,14 @@ def patient(stem):
     for p in (parts[0], parts[-1]):
         if p.casefold() not in NOUNS and not iso(p): return p
 
-root = Path(sys.argv[1])
-out = Path(sys.argv[2])
-cov = defaultdict(lambda: defaultdict(set))   # cov[type][date] = {casefolded patient}
+ap = argparse.ArgumentParser()
+ap.add_argument('data_root', type=Path)
+ap.add_argument('--out', type=Path, default="coverage.csv")
+args =  ap.parse_args()
+root = args.data_root
+cov = defaultdict(lambda: defaultdict(set))
 date_covered = defaultdict(set)
-display = {}                                   # casefolded -> first-seen original
+display = {}
 
 def add(typ, d, p):
     cov[typ][d].add(p.casefold())
@@ -66,5 +66,7 @@ for p, d in keys:
 
 df = pd.DataFrame(rows)
 holes = df[df[types].eq('').any(axis=1)]
+with open(args.out, "w") as f:
+    df.to_csv(f, index=False)
 print(df.to_string(index=False))
 print(f"\n{len(holes)} holes (- = missing, ? = type has the date but no patient attribution)")

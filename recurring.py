@@ -1,13 +1,11 @@
-import json, re, sys
+import argparse, json, re
 from collections import defaultdict
 from pathlib import Path
 
+from numpy import require
+
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
-if len(sys.argv) != 2:
-    print(f"Usage: {sys.argv[0]} <data_root>")
-    exit(1)
-
 
 def iso(s):
     m = DATE.search(s)
@@ -15,8 +13,10 @@ def iso(s):
     g = m.groups()
     return f"{g[3]}-{g[4]}-{g[5]}" if g[3] else f"{g[2]}-{g[1]}-{g[0]}"
 
-root = Path(sys.argv[1])
-visits = defaultdict(lambda: defaultdict(list))   # pid -> date -> [times or None]
+ap = argparse.ArgumentParser()
+ap.add_argument('data_root', type=Path)
+root = ap.parse_args().data_root
+visits = defaultdict(lambda: defaultdict(list))
 display = {}
 
 def add(p, d, t=None):
@@ -37,7 +37,6 @@ for kj in root.glob('kalendarze/*.json'):
         add(a['patient'], d, a['time'])
 
 def visit_count(dates):
-    """Per date: max(1 if any filename-only evidence, count of kalendarz times)."""
     n = 0
     for ts in dates.values():
         times = [t for t in ts if t]

@@ -1,10 +1,7 @@
-import json, re, shutil, sys
+import argparse, json, re, shutil, sys
 from pathlib import Path
 
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
-if len(sys.argv) != 2:
-    print(f"Usage: {sys.argv[0]} <data_root>")
-    exit(1)
 
 def iso(s):
     m = DATE.search(s)
@@ -18,8 +15,8 @@ def patient(stem, noun):
         if p.casefold() not in {noun, noun + 'y'} and not iso(p): return p
 
 def canon(p):
-    if '-' in p: return p, None
-    if len(p) == 2: return f'{p[0]}-{p[1]}', None
+    if '-' in p: return p.upper(), None
+    if len(p) == 2: return f'{p[0].upper()}-{p[1].upper()}', None
     return p, f"patient '{p}' has {len(p)} chars and no hyphen; needs manual fix"
 
 def plan(root):
@@ -94,12 +91,12 @@ def plan(root):
 
 
 def main():
-    args = sys.argv[1:]
-    fix = '--fix' in args; args = [a for a in args if a != '--fix']
-    csv = None
-    if '--patients-csv' in args:
-        i = args.index('--patients-csv'); csv = Path(args[i+1]); del args[i:i+2]
-    root = Path(args[0]).resolve()
+    ap = argparse.ArgumentParser()
+    ap.add_argument('data_root', type=Path)
+    ap.add_argument('--fix', action='store_true')
+    args = ap.parse_args()
+    fix = args.fix
+    root = args.data_root.resolve()
     new_root = root.parent / f'{root.name}_renamed'
 
     records = list(plan(root))
@@ -124,10 +121,6 @@ def main():
         except ValueError: rel = s
         print(f'  ! {rel}  ({why})')
     for d, a, b in collisions: print(f'  X {d}  <- {a.relative_to(root)}  <- {b.relative_to(root)}')
-
-    if csv:
-        csv.write_text('initials,date\n' + ''.join(f'{p},{d}\n' for p, d in pairs))
-        print(f'wrote {csv}')
 
     if fix and not collisions and not new_root.exists():
         new_root.mkdir()
