@@ -10,21 +10,25 @@ Steps:
     ```
 1. preview ID assignments, then commit
     ```console
-    python assign_ids.py data/
-    python assign_ids.py data/ --apply
+    uv run  assign_ids.py data/
+    uv run  assign_ids.py data/ --apply
     ```
 1. preview mapping, then commit
     ```console
-    python map_data.py data/
-    python map_data.py data/ --apply
+    uv run  map_data.py data/
+    uv run  map_data.py data/ --apply
     ```
 1. coverage report
     ```console
-    python coverage.py data/
+    uv run  coverage.py data/
     ```
-1. once clean, send data to remote
+1. once clean, zip data
     ```console
-    sudo bash zipsync.sh data
+    uv run zipencrypt.py data/
+    ```
+1. send data to remote
+    ```console
+    bash zipsync.sh <wg_interface_name> <path_to_send> <username>@<host>:<path>
     ```
 
 - validate.py: check file names
