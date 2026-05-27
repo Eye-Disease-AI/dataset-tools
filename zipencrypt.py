@@ -3,7 +3,7 @@ import os, sys, getpass, pyzipper, datetime, tqdm, argparse
 
 EXCLUDE_EXT = {'.zip'}
 ap = argparse.ArgumentParser()
-ap.add_argument('data_root', required=True)
+ap.add_argument('data_root')
 args = ap.parse_args()
 
 src = args.data_root
