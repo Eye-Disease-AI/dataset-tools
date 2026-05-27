@@ -25,6 +25,7 @@ def get_patient(filename):
 parser = argparse.ArgumentParser()
 parser.add_argument('data_root', type=Path)
 parser.add_argument('--out', type=Path, default="coverage.csv")
+parser.add_argument('--all', action='store_true')
 parser.add_argument('--ids', type=Path, default=Path('patient_ids.json'),
                     help='patient_ids.json from assign_ids.py; used to attribute photos to patients')
 args =  parser.parse_args()
@@ -110,7 +111,11 @@ for patient, date in keys:
         elif coverage[type][date]: row[type] = ''
         elif date in date_covered[type]: row[type] = '?'
         else: row[type] = ''
-    rows.append(row)
+    if args.all:
+        rows.append(row)
+    elif not all(row[type] for type in types):
+        rows.append(row) # only print rows with missing data
+
 
 df = pd.DataFrame(rows)
 holes = df[df[types].eq('').any(axis=1)]
