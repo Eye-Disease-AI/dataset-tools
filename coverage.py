@@ -26,14 +26,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('data_root', type=Path)
 parser.add_argument('--out', type=Path, default="coverage.csv")
 parser.add_argument('--all', action='store_true')
-parser.add_argument('--ids', type=Path, default=Path('patient_ids.json'),
-                    help='patient_ids.json from assign_ids.py; used to attribute photos to patients')
 args =  parser.parse_args()
 root = args.data_root
-if not args.ids.exists():
-    print(f'ERROR: {args.ids} not found. Run assign_ids.py first', file=sys.stderr)
+ids_json = args.data_root / "patient_ids.json"
+if not ids_json.exists():
+    print(f'ERROR: {ids_json} not found. Run assign_ids.py first', file=sys.stderr)
     sys.exit(2)
-ids = json.loads(args.ids.read_text())
+ids = json.loads(ids_json.read_text())
 coverage = defaultdict(lambda: defaultdict(set))
 date_covered = defaultdict(set)
 display = {}
@@ -96,6 +95,8 @@ for f in root.glob('zdjecia/*/*'):
     if slot_time is None:
         continue
 
+    if slot_time == '-':
+        continue
     for patient in ids[date][slot_time]:
         add_coverage('zdjecia', date, patient)
 
