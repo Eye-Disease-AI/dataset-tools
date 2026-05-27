@@ -1,4 +1,5 @@
 import argparse, json, re
+import sys
 from collections import defaultdict
 from pathlib import Path
 import pandas as pd
@@ -6,9 +7,12 @@ import pandas as pd
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
 PATIENT_RE = re.compile(r'(\w+)-(\w+)')
+TIME_RE = re.compile(r'(\d{2})-(\d{2})')
+
 def iso(s):
     m = DATE.search(s)
-    if not m: return None
+    if not m:
+        return None
     g = m.groups()
     return f"{g[3]}-{g[4]}-{g[5]}" if g[3] else f"{g[2]}-{g[1]}-{g[0]}"
 
@@ -21,8 +25,14 @@ def get_patient(filename):
 parser = argparse.ArgumentParser()
 parser.add_argument('data_root', type=Path)
 parser.add_argument('--out', type=Path, default="coverage.csv")
+parser.add_argument('--ids', type=Path, default=Path('patient_ids.json'),
+                    help='patient_ids.json from assign_ids.py; used to attribute photos to patients')
 args =  parser.parse_args()
 root = args.data_root
+if not args.ids.exists():
+    print(f'ERROR: {args.ids} not found. Run assign_ids.py first', file=sys.stderr)
+    sys.exit(2)
+ids = json.loads(args.ids.read_text())
 coverage = defaultdict(lambda: defaultdict(set))
 date_covered = defaultdict(set)
 display = {}
@@ -53,9 +63,40 @@ for f in root.glob('kalendarze/*'):
         for appointment in json.loads(f.read_text())['appointments']:
             add_coverage('kalendarze', date, appointment['patient'])
 
-# Zdjecia
+def photo_time(stem):
+    """Pull HH:MM from photo filename, ignoring the date portion."""
+    stem_without_date = re.sub(r'\d{4}-\d{2}-\d{2}', '', stem)
+    time_match = TIME_RE.search(stem_without_date)
+    if not time_match:
+        return None
+    return f'{time_match.group(1)}:{time_match.group(2)}'
+
+def matching_slot(date, hhmm):
+    """Last visit slot on `date` whose start <= hhmm. None if photo is before all visits."""
+    slots = ids.get(date, {})
+    candidate_times = [t for t in slots if t <= hhmm]
+    if not candidate_times:
+        return None
+    return max(candidate_times)
+
 for f in root.glob('zdjecia/*/*'):
-    if f.is_file() and (date := iso(f.parts[-2])): date_covered['zdjecia'].add(date)
+    if not f.is_file():
+        continue
+    date = iso(f.parts[-2])
+    if not date:
+        continue
+    date_covered['zdjecia'].add(date)
+
+    hhmm = photo_time(f.stem)
+    if hhmm is None:
+        continue
+
+    slot_time = matching_slot(date, hhmm)
+    if slot_time is None:
+        continue
+
+    for patient in ids[date][slot_time]:
+        add_coverage('zdjecia', date, patient)
 
 
 types = ['kwestionariusze', 'zakresy', 'notatki', 'kalendarze', 'zdjecia']
