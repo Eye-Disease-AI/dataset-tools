@@ -8,7 +8,7 @@ from pathlib import Path
 
 DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
 TIME_RE = re.compile(r'(\d{2})-(\d{2})')
-PATIENT_INITIALS = re.compile(r'^[A-Za-z]-[A-Za-z]$')
+PATIENT_INITIALS = re.compile(r'^\w+-\w+$')
 
 
 def find_initials(stem):
