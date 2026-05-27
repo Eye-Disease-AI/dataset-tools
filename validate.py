@@ -11,103 +11,154 @@ def iso(s):
 
 PID_RE = re.compile(r'p\d+')
 
-def patient(stem, noun):
+def make_patient_id(stem, noun):
     parts = stem.split('_')
     for p in (parts[0], parts[-1], parts[-2] if len(parts) > 1 else ''):
-        if p and p.casefold() not in {noun, noun + 'y'} and not iso(p) and not PID_RE.fullmatch(p): return p
+        if p and p.casefold() not in {noun, noun + 'y'} and not iso(p) and not PID_RE.fullmatch(p):
+            return p
 
-def canon(p):
-    if '-' in p: return p.upper(), None
-    if len(p) == 2: return f'{p[0].upper()}-{p[1].upper()}', None
-    return p, f"patient '{p}' has {len(p)} chars and no hyphen; needs manual fix"
+def canonise_patient_id(patient):
+    if '-' in patient:
+        return patient.upper(), None
+    if len(patient) == 2:
+        return f'{patient[0].upper()}-{patient[1].upper()}', None
+    return patient, f"patient '{patient}' has {len(patient)} chars and no hyphen; needs manual fix"
 
 def pid(ids, p, d, t=None):
+    """Look up patient in patient_ids.json. Returns (pid, err, warn).
+       Used for consistency checking only — pid value is no longer written to filenames."""
     slot = ids.get(d)
     if not slot: return None, f"no entry for date {d} in JSON", None
     if t is not None:
         by_init = slot.get(t)
-        if not by_init or p not in by_init: return None, f"no patient ID for {p} on {d} at {t} in JSON", None
-        if by_init[p] is None: return None, None, f"unresolved patient ID for {p} on {d} {t}"
+        if not by_init or p not in by_init:
+            return None, f"no patient ID for {p} on {d} at {t} in JSON", None
+        if by_init[p] is None:
+            return None, None, f"unresolved patient ID for {p} on {d} {t}"
         return by_init[p], None, None
     hits = [(t2, by_init[p]) for t2, by_init in slot.items() if p in by_init]
-    if not hits: return None, f"no patient ID for {p} on {d} in JSON", None
-    if len(hits) > 1: return None, f"multiple visits for {p} on {d}; can't tell which one this file is", None
+    if not hits:
+        return None, f"no patient ID for {p} on {d} in JSON", None
+    if len(hits) > 1:
+        return None, f"multiple visits for {p} on {d}; can't tell which one this file is", None
     _, v = hits[0]
-    if v is None: return None, None, f"unresolved patient ID for {p} on {d}"
+    if v is None:
+        return None, None, f"unresolved patient ID for {p} on {d}"
     return v, None, None
 
 def plan(root, ids):
     for sub, noun in [('kwestionariusze', 'kwestionariusz'), ('zakresy', 'zakres')]:
-        for f in root.glob(f'formularze/*/{sub}/*.jpg'):
-            d = iso(f.parts[-3])
-            if not d: yield f, None, None, None, f"bad folder date {f.parts[-3]}", None; continue
-            sd = iso(f.stem)
-            if sd and sd != d: yield f, None, None, None, f"folder {d} vs stem {sd}", None; continue
-            p = patient(f.stem, noun)
-            if not p: yield f, None, None, None, "no patient", None; continue
-            p, err = canon(p)
-            if err: yield f, None, None, None, err, None; continue
-            i, err, warn = pid(ids, p, d)
-            if err: yield f, None, p, d, err, None; continue
-            suffix = f'_{i}' if i else ''
-            yield f, Path(f'formularze/{d}/{sub}/{noun}_{d}_{p}{suffix}.jpg'), p, d, None, warn
+        for filename in root.glob(f'formularze/*/{sub}/*.jpg'):
+            day = iso(filename.parts[-3])
+            if not day:
+                yield filename, None, None, None, f"bad folder date {filename.parts[-3]}", None
+                continue
+            sd = iso(filename.stem)
+            if sd and sd != day:
+                yield filename, None, None, None, f"folder {day} vs stem {sd}", None
+                continue
+            if PID_RE.search(filename.stem):
+                yield filename, None, None, day, "patient id in filename; not allowed (lives in patient_ids.json)", None
+                continue
+            p = make_patient_id(filename.stem, noun)
+            if not p:
+                yield filename, None, None, None, "no patient", None
+                continue
+            p, err = canonise_patient_id(p)
+            if err:
+                yield filename, None, None, None, err, None
+                continue
+            _i, err, warn = pid(ids, p, day)
+            if err:
+                yield filename, None, p, day, err, None
+                continue
+            yield filename, Path(f'formularze/{day}/{sub}/{noun}_{day}_{p}.jpg'), p, day, None, warn
 
     for date_dir in (root / 'formularze').glob('*'):
-        if not date_dir.is_dir(): continue
-        d = iso(date_dir.name)
-        if not d: continue
+        if not date_dir.is_dir():
+            continue
+        day = iso(date_dir.name)
+        if not day:
+            continue
         for name, base in [('detect', 'detect'), ('detect_verified', 'detect-verified')]:
-            existing = next((date_dir / n for n in (f'{name}.json', f'{base}_{d}.json') if (date_dir / n).exists()), None)
-            if existing: yield existing, Path(f'formularze/{d}/{base}_{d}.json'), None, None, None, None
-            else: yield date_dir / f'{name}.json', None, None, None, f"required {name}.json missing", None
+            existing = next((date_dir / n for n in (f'{name}.json', f'{base}_{day}.json') if (date_dir / n).exists()), None)
+            if existing:
+                yield existing, Path(f'formularze/{day}/{base}_{day}.json'), None, None, None, None
+            else:
+                yield date_dir / f'{name}.json', None, None, None, f"required {name}.json missing", None
 
-    for f in root.glob('notatki/*/*.[pP][nN][gG]'):
-        d = iso(f.parts[-2])
-        if not d: yield f, None, None, None, f"bad folder date {f.parts[-2]}", None; continue
-        p = patient(f.stem, 'notatka')
-        if not p: yield f, None, None, None, "no patient", None; continue
-        p, err = canon(p)
-        if err: yield f, None, None, None, err, None; continue
-        i, err, warn = pid(ids, p, d)
-        if err: yield f, None, p, d, err, None; continue
-        suffix = f'_{i}' if i else ''
-        yield f, Path(f'notatki/{d}/notatka_{d}_{p}{suffix}.png'), p, d, None, warn
+    for filename in root.glob('notatki/*/*.[pP][nN][gG]'):
+        day = iso(filename.parts[-2])
+        if not day:
+            yield filename, None, None, None, f"bad folder date {filename.parts[-2]}", None
+            continue
+        if PID_RE.search(filename.stem):
+            yield filename, None, None, day, "patient id in filename; not allowed (lives in patient_ids.json)", None
+            continue
+        p = make_patient_id(filename.stem, 'notatka')
+        if not p:
+            yield filename, None, None, None, "no patient", None
+            continue
+        p, err = canonise_patient_id(p)
+        if err:
+            yield filename, None, None, None, err, None
+            continue
+        _i, err, warn = pid(ids, p, day)
+        if err:
+            yield filename, None, p, day, err, None
+            continue
+        yield filename, Path(f'notatki/{day}/notatka_{day}_{p}.png'), p, day, None, warn
 
-    sch = {}
-    for f in root.glob('kalendarze/*'):
-        if f.suffix.lower() == '.zip' or not f.is_file(): continue
-        d = iso(f.stem)
-        if not d: yield f, None, None, None, "no date in name", None; continue
-        yield f, Path(f'kalendarze/kalendarz_{d}{f.suffix.lower()}'), None, d, None, None
-        if f.suffix.lower() == '.json':
-            appts = sorted((a['time'], a['patient']) for a in json.loads(f.read_text())['appointments'])
-            sch[d] = []
-            for t, p_raw in appts:
-                p, err = canon(p_raw)
-                if err: yield f, None, None, None, f"in JSON: {err}", None; continue
-                i, err, warn = pid(ids, p, d, t)
-                if err: yield f, None, p, d, f"in JSON: {err}", None; continue
-                yield f, None, p, d, None, warn
-                sch[d].append((t, p, i))
+    schedule = {}
+    for filename in root.glob('kalendarze/*'):
+        if filename.suffix.lower() == '.zip' or not filename.is_file():
+            continue
+        day = iso(filename.stem)
+        if not day:
+            yield filename, None, None, None, "no date in name", None
+            continue
+        yield filename, Path(f'kalendarze/kalendarz_{day}{filename.suffix.lower()}'), None, day, None, None
+        if filename.suffix.lower() == '.json':
+            appts = sorted((a['time'], a['patient']) for a in json.loads(filename.read_text())['appointments'])
+            schedule[day] = []
+            for t, patient in appts:
+                p, err = canonise_patient_id(patient)
+                if err:
+                    yield filename, None, None, None, f"in JSON: {err}", None
+                    continue
+                _i, err, warn = pid(ids, p, day, t)
+                if err:
+                    yield filename, None, p, day, f"in JSON: {err}", None
+                    continue
+                yield filename, None, p, day, None, warn
+                schedule[day].append((t, p))
 
-    for f in root.glob('zdjecia/*/*'):
-        if not f.is_file() or f.suffix.lower() == '.zip': continue
-        d = iso(f.parts[-2])
-        if not d: continue
-        rest = re.sub(r'^.*?\d{4}-\d{2}-\d{2}[ _-]*', '', f.stem).replace(' ', '_')
+    for filename in root.glob('zdjecia/*/*'):
+        if not filename.is_file() or filename.suffix.lower() == '.zip':
+            continue
+        day = iso(filename.parts[-2])
+        if not day:
+            continue
+        file_basename = re.sub(r'^.*?\d{4}-\d{2}-\d{2}[ _-]*', '', filename.stem).replace(' ', '_')
+
+        # resolve patient via calendar + photo time (for reporting only never written to filename)
         p = None
-        i = None
-        if d in sch:
-            m = re.search(r'(\d{2})-(\d{2})', rest)
-            if m:
-                hhmm = f'{m.group(1)}:{m.group(2)}'
-                hit = next(((pp, ii) for t, pp, ii in reversed(sch[d]) if t <= hhmm), None)
-                if not hit: yield f, None, None, None, f"photo at {hhmm} before all appointments on {d}", None; continue
-                p, i = hit
-        suffix = f'_{i}' if i else ''
-        if rest.endswith(suffix) and suffix: rest = rest[:-len(suffix)]
-        new_stem = f'zdjecie_{d}_{rest}{suffix}' if rest else f'zdjecie_{d}{suffix}'
-        yield f, Path(f'zdjecia/{d}/{new_stem}{f.suffix.lower()}'), p, d, None, None
+        if day in schedule:
+            time_match = re.search(r'(\d{2})-(\d{2})', file_basename)
+            if time_match:
+                hhmm = f'{time_match.group(1)}:{time_match.group(2)}'
+                hit = False
+                for t, pp in reversed(schedule[day]):
+                    if t <= hhmm:
+                        p = pp
+                        hit = True
+                        break
+                if not hit:
+                    yield filename, None, None, None, f"photo at {hhmm} before all appointments on {day}", None
+                    continue
+
+        new_stem = f'zdjecie_{day}_{file_basename}' if file_basename else f'zdjecie_{day}'
+        yield filename, Path(f'zdjecia/{day}/{new_stem}{filename.suffix.lower()}'), p, day, None, None
 
 def main():
     ap = argparse.ArgumentParser()
@@ -141,7 +192,8 @@ def main():
         else: seen[d] = s
 
     print(f'{len(needs)} need rename, {len(problems)} problems, {len(warnings)} warnings, {len(collisions)} collisions, {len(pairs)} patient-date rows')
-    for s, d in needs: print(f'  {s.relative_to(root)} -> {d}')
+    for s, d in needs:
+        print(f'  {s.relative_to(root)} -> {d}')
     for s, why in problems:
         try: rel = s.relative_to(root)
         except ValueError: rel = s
@@ -150,7 +202,8 @@ def main():
         try: rel = s.relative_to(root)
         except ValueError: rel = s
         print(f'  ~ {rel}  ({w})')
-    for d, a, b in collisions: print(f'  X {d}  <- {a.relative_to(root)}  <- {b.relative_to(root)}')
+    for d, a, b in collisions:
+        print(f'  X {d}  <- {a.relative_to(root)}  <- {b.relative_to(root)}')
 
     if csv:
         csv.write_text('initials,date\n' + ''.join(f'{p},{d}\n' for p, d in pairs))
