@@ -2,7 +2,7 @@ import argparse, json, re
 from collections import defaultdict
 from pathlib import Path
 
-NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
+DATA_TYPES = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
 
 def iso(s):
@@ -11,94 +11,146 @@ def iso(s):
     g = m.groups()
     return f"{g[3]}-{g[4]}-{g[5]}" if g[3] else f"{g[2]}-{g[1]}-{g[0]}"
 
-def canon(p):
-    if '-' in p: return p.upper()
-    if len(p) == 2: return f'{p[0].upper()}-{p[1].upper()}'
-    return p
+def parse_patient_id(patient):
+    if '-' in patient: return patient.upper()
+    if len(patient) == 2: return f'{patient[0].upper()}-{patient[1].upper()}'
+    return patient
 
 PID_RE = re.compile(r'p\d+')
 
-def patient(stem, nouns):
+def get_patient(stem, nouns):
     parts = stem.split('_')
     for p in (parts[0], parts[-1], parts[-2] if len(parts) > 1 else ''):
-        if p and p.casefold() not in nouns and not iso(p) and not PID_RE.fullmatch(p): return canon(p)
+        if p and p.casefold() not in nouns and not iso(p) and not PID_RE.fullmatch(p):
+            return parse_patient_id(p)
 
-ap = argparse.ArgumentParser()
-ap.add_argument('data_root', type=Path)
-ap.add_argument('--json', type=Path, default=Path('patient_ids.json'))
-args = ap.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('data_root', type=Path)
+parser.add_argument('--json', type=Path, default=Path('patient_ids.json'))
+args = parser.parse_args()
 
-mapping = json.loads(args.json.read_text()) if args.json.exists() else {}
+# dict[date][hour_slot][initials] -> patient ID
+# allows to tell whether a patient at given date&time&initials is the same
+# as the same initials in another visit
+patient_id_mapping = json.loads(args.json.read_text()) if args.json.exists() else {}
 
 kalendarze = {}
-for kj in args.data_root.glob('kalendarze/*.json'):
-    d = iso(kj.stem)
-    if not d: continue
-    kalendarze[d] = [(a['time'], canon(a['patient'])) for a in json.loads(kj.read_text())['appointments']]
+for callendars_json in args.data_root.glob('kalendarze/*.json'):
+    date = iso(callendars_json.stem)
+    if not date: 
+        continue
+    kalendarze[date] = [
+        (appointment['time'], parse_patient_id(appointment['patient']))
+        for appointment in json.loads(callendars_json.read_text())['appointments']
+    ]
 
-visits = defaultdict(lambda: defaultdict(set))  # date -> initials -> {times or '-'}
-for d, appts in kalendarze.items():
-    for t, p in appts:
-        visits[d][p].add(t)
+visit_hours = defaultdict(lambda: defaultdict(set))
+for date, appointments in kalendarze.items():
+    for time_slot, patient_initials in appointments:
+        visit_hours[date][patient_initials].add(time_slot)
 
-dates_with_kalendarz = set(kalendarze)
-filename_pairs = set()
-for f in args.data_root.glob('formularze/*/*/*.jpg'):
-    d = iso(f.parts[-3])
-    p = patient(f.stem, NOUNS)
-    if d and p: filename_pairs.add((p, d))
-for f in args.data_root.glob('notatki/*/*.[pP][nN][gG]'):
-    d = iso(f.parts[-2])
-    p = patient(f.stem, NOUNS)
-    if d and p: filename_pairs.add((p, d))
+dates_with_callendar = set(kalendarze.keys())
+patient_dates = set()
+
+for f in args.data_root.glob('formularze/**/*.jpg'):
+    date = iso(f.parts[-3])
+    patient_initials = get_patient(f.stem, DATA_TYPES)
+    if date and patient_initials:
+        patient_dates.add((patient_initials, date))
+
+for f in args.data_root.glob('notatki/**/*.[pP][nN][gG]'):
+    date = iso(f.parts[-2])
+    patient_initials = get_patient(f.stem, DATA_TYPES)
+    if date and patient_initials:
+        patient_dates.add((patient_initials, date))
 
 inconsistencies = []
-for p, d in filename_pairs:
-    if d in dates_with_kalendarz:
-        if p not in visits[d]:
-            inconsistencies.append((p, d))
+for patient_initials, date in patient_dates:
+    if date in dates_with_callendar:
+        if patient_initials not in visit_hours[date]:
+            inconsistencies.append((patient_initials, date))
     else:
-        visits[d][p].add('-')
+        visit_hours[date][patient_initials].add('-')
 
-initials_seen = defaultdict(set)  # initials -> set of IDs already in use
-for d, slot in mapping.items():
-    for t, by_init in slot.items():
-        for init, pid in by_init.items():
-            if pid: initials_seen[init].add(pid)
+patients_by_initials = defaultdict(set)
+for date, visits_in_date_per_slot in patient_id_mapping.items():
+    for time_slot, patients_in_slot in visits_in_date_per_slot.items():
+        for initials, patient_id in patients_in_slot.items():
+            patients_by_initials[initials].add(patient_id)
 
-existing_ids = {pid for slot in mapping.values() for by_init in slot.values() for pid in by_init.values() if pid}
-next_n = max((int(i[1:]) for i in existing_ids if re.fullmatch(r'p\d+', i)), default=0) + 1
+existing_ids = {patient_id
+    for (_date, slot) in patient_id_mapping.items()
+    for initials_patient_map in slot.values()
+    for patient_id in initials_patient_map.values()
+    if patient_id
+}
+next_id = max(
+    (
+        int(i[1:])
+        for i in existing_ids # p001, p002...
+    ), default=0
+) + 1
 
 new_assigned = []
+# when patient initials are duplicated and at least 2 occurences dont have an ID
 new_unresolved = []
 stale_dashes = []
-for d in sorted(visits):
-    slot = mapping.setdefault(d, {})
-    for p in sorted(visits[d]):
-        for t in sorted(visits[d][p]):
-            by_init = slot.setdefault(t, {})
-            if p in by_init: continue
-            if initials_seen[p]:
-                by_init[p] = None
-                new_unresolved.append((d, t, p))
-            else:
-                pid = f'p{next_n:03d}'
-                next_n += 1
-                by_init[p] = pid
-                initials_seen[p].add(pid)
-                new_assigned.append((d, t, p, pid))
-    if '-' in slot and any(t != '-' for t in slot):
-        for p in slot.get('-', {}):
-            if any(p in slot[t] for t in slot if t != '-'):
-                stale_dashes.append((d, p))
 
-mapping = {d: {t: dict(sorted(by_init.items())) for t, by_init in sorted(slot.items())} for d, slot in sorted(mapping.items())}
-args.json.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + '\n')
+for date, patients in sorted(visit_hours.items()):
+    slots = patient_id_mapping.setdefault(date, {})
+
+    for patient_initials in sorted(patients):
+        for time_slot in sorted(patients[patient_initials]):
+            slot = slots.setdefault(time_slot, {})
+
+            if patient_initials in slot:
+                continue
+
+            if patients_by_initials[patient_initials]:
+                slot[patient_initials] = None
+                new_unresolved.append((date, time_slot, patient_initials))
+            else:
+                patient_id = f'p{next_id:03d}'
+                next_id += 1
+                slot[patient_initials] = patient_id
+                patients_by_initials[patient_initials].add(patient_id)
+                new_assigned.append((date, time_slot, patient_initials, patient_id))
+
+    dash_slot = slots.get('-', {})
+    real_slots = [s for t, s in slots.items() if t != '-']
+    if dash_slot and real_slots:
+        for patient_initials in dash_slot:
+            if any(patient_initials in s for s in real_slots):
+                stale_dashes.append((date, patient_initials))
+
+# from pprint import pprint
+# pprint(patients_by_initials)
+# pprint(patients_in_slot)
+
+patient_id_mapping = {date:
+    {
+        time_slot: dict(sorted(patient_id_map.items()))
+        for time_slot, patient_id_map in sorted(appointment.items())
+    }
+    for date, appointment in sorted(patient_id_mapping.items())
+}
+args.json.write_text(json.dumps(patient_id_mapping, indent=2, ensure_ascii=False) + '\n')
 
 print(f'{len(new_assigned)} newly assigned, {len(new_unresolved)} need review')
-for d, t, p, pid in new_assigned: print(f'  + {d} {t} {p} -> {pid}')
-for d, t, p in new_unresolved: print(f'  ? {d} {t} {p}  (same initials seen before, please set ID)')
-for p, d in inconsistencies: print(f'  ! {p} on {d}: filename exists but kalendarz has no such patient')
-for d, p in stale_dashes: print(f'  ! {p} on {d}: kalendarz now has times but "-" entry still present, migrate manually')
-unresolved_total = sum(1 for slot in mapping.values() for by_init in slot.values() for v in by_init.values() if v is None)
-if unresolved_total: print(f'\n{unresolved_total} total unresolved entries in {args.json}')
+for date, time_slot, patient_initials, patient_id in new_assigned:
+    print(f'  + {date} {time_slot} {patient_initials} -> {patient_id}')
+for date, time_slot, patient_initials in new_unresolved:
+    print(f'  ? {date} {time_slot} {patient_initials}  (same initials seen before, please set ID)')
+for patient_initials, date in inconsistencies:
+    print(f'  ! {patient_initials} on {date}: filename exists but kalendarz has no such patient')
+for date, patient_initials in stale_dashes:
+    print(f'  ! {patient_initials} on {date}: kalendarz now has times but "-" entry still present, migrate manually')
+
+unresolved_total = sum(1
+    for time_slot in patient_id_mapping.values()
+    for by_initials in time_slot.values()
+    for pid in by_initials.values()
+    if pid is None
+)
+if unresolved_total:
+    print(f'\n{unresolved_total} total unresolved entries in {args.json}')
