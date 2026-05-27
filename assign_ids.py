@@ -26,9 +26,11 @@ def get_patient(stem, nouns):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('data_root', type=Path)
-parser.add_argument('--json', type=Path, default=Path('patient_ids.json'))
+parser.add_argument('--json', type=Path)
 args = parser.parse_args()
-
+if args.json is None:
+    args.json = Path.joinpath(args.data_root, "patient_ids.json")
+    
 # dict[date][hour_slot][initials] -> patient ID
 # allows to tell whether a patient at given date&time&initials is the same
 # as the same initials in another visit
