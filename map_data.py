@@ -87,7 +87,7 @@ def resolve_photo(root, ids):
                    else f'no slot for photo at {hhmm} on {date}')
             yield None, f, why
             continue
-        yield (pid, initials, date, slot_time, 'zdjecia', f), None, None
+        yield (pid, initials, date, slot_time, 'slitlamp', f), None, None
 
 
 def build_mapping(root, ids):
@@ -97,12 +97,12 @@ def build_mapping(root, ids):
     pid_initials = {}
     unresolved = []
 
-    multi_types = {'zdjecia'}
+    multi_types = {'slitlamp'}
 
     sources = [
-        resolve_form_or_note(root, 'formularze/*/kwestionariusze/*.jpg', -3, 'kwestionariusz', ids),
-        resolve_form_or_note(root, 'formularze/*/zakresy/*.jpg', -3, 'zakres', ids),
-        resolve_form_or_note(root, 'notatki/*/*.[pP][nN][gG]', -2, 'notatka', ids),
+        resolve_form_or_note(root, 'formularze/*/kwestionariusze/*.jpg', -3, 'form', ids),
+        resolve_form_or_note(root, 'formularze/*/zakresy/*.jpg', -3, 'form_scope', ids),
+        resolve_form_or_note(root, 'notatki/*/*.[pP][nN][gG]', -2, 'notes', ids),
         resolve_photo(root, ids),
     ]
     for source in sources:
