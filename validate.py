@@ -1,10 +1,10 @@
 import argparse, re, sys
 from pathlib import Path
+import unicodedata
 
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
-PATIENT_INITIALS = re.compile(r'^[A-Za-z]-[A-Za-z]$')
+PATIENT_INITIALS = re.compile(r'^[^\W\d_]+-[^\W\d_]+$')
 TIME_RE = re.compile(r'\d{2}-\d{2}-\d{2}')
-
 
 def iso(s):
     m = DATE.search(s)
@@ -15,6 +15,7 @@ def iso(s):
 
 
 def has_initials(stem):
+    normalized = unicodedata.normalize('NFD', stem)
     return any(PATIENT_INITIALS.match(p) for p in stem.split('_'))
 
 
