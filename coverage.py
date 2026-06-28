@@ -144,6 +144,11 @@ for f in root.glob('smartfon/**/*'):
 types = ['kwestionariusze', 'zakresy', 'notatki', 'kalendarze', 'zdjecia', 'smartfon']
 keys = sorted({(patient, date) for t in coverage.values() for date, ps in t.items() for patient in ps})
 
+known_dates = {date for _, date in keys}
+all_dates = {d for t in types for d in date_covered[t]}
+display['unknown'] = 'unknown'
+keys += sorted(('unknown', d) for d in all_dates - known_dates)
+
 rows = []
 for patient, date in keys:
     row = {'patient': display[patient], 'date': date}
