@@ -6,6 +6,12 @@ import argparse, json, re, sys
 from collections import defaultdict
 from pathlib import Path
 
+from PIL import Image, ExifTags
+
+# EXIF tag id for DateTimeOriginal (camera capture time), resolved once.
+DATETIME_ORIGINAL = next(k for k, v in ExifTags.TAGS.items() if v == 'DateTimeOriginal')
+IMG_EXTS = {'.jpg', '.jpeg', '.png', '.heic'}
+
 DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
 TIME_RE = re.compile(r'(\d{2})-(\d{2})')
 PATIENT_INITIALS = re.compile(r'^\w+-\w+$')
@@ -90,6 +96,39 @@ def resolve_photo(root, ids):
         yield (pid, initials, date, slot_time, 'slitlamp', f), None, None
 
 
+def exif_capture(path):
+    try:
+        exif = Image.open(path)._getexif() or {}
+    except Exception:
+        return None, None
+    raw = exif.get(DATETIME_ORIGINAL)
+    if not raw or len(raw) < 16:
+        return None, None
+    date = raw[:10].replace(':', '-')
+    hhmm = raw[11:16]
+    if not DATE_RE.fullmatch(date) or not re.fullmatch(r'\d{2}:\d{2}', hhmm):
+        return None, None
+    return date, hhmm
+
+
+def resolve_smartphone(root, ids):
+    for f in root.glob('smartfon/**/*'):
+        if not f.is_file() or f.suffix.lower() not in IMG_EXTS:
+            continue
+        date, hhmm = exif_capture(f)
+        if date is None:
+            yield None, f, 'no DateTimeOriginal in image metadata'
+            continue
+        slot_time, initials, pid = slot_for_time(ids, date, hhmm)
+        if pid is None:
+            why = (f'slot at {slot_time} on {date} has unresolved patient id ({initials})'
+                   if slot_time is not None
+                   else f'no slot for capture at {hhmm} on {date}')
+            yield None, f, why
+            continue
+        yield (pid, initials, date, slot_time, 'smartfon', f), None, None
+
+
 def build_mapping(root, ids):
     """Returns (mapping_dict, unresolved_list)."""
     # pid -> (date, slot_time) -> {initials, files: {ftype: path | [paths]}}
@@ -97,13 +136,14 @@ def build_mapping(root, ids):
     pid_initials = {}
     unresolved = []
 
-    multi_types = {'slitlamp'}
+    multi_types = {'slitlamp', 'smartfon'}
 
     sources = [
         resolve_form_or_note(root, 'formularze/*/kwestionariusze/*.jpg', -3, 'form', ids),
         resolve_form_or_note(root, 'formularze/*/zakresy/*.jpg', -3, 'form_scope', ids),
         resolve_form_or_note(root, 'notatki/*/*.[pP][nN][gG]', -2, 'notes', ids),
         resolve_photo(root, ids),
+        resolve_smartphone(root, ids),
     ]
     for source in sources:
         for resolved, bad_file, why in source:
