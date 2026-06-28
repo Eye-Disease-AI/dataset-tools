@@ -1,0 +1,52 @@
+<View>
+  <Header value="Pacjent: $patient_id"/>
+
+
+<!-- Diagnosis -->
+  <View>
+    <Header value="Diagnoza (dla całego pacjenta)"/>
+    <Choices name="diagnosis" toName="form" choice="single" required="true" requiredMessage="Wybierz diagnozę">
+      <Choice value="Zdrowe"/>
+      <Choice value="Inne choroby"/>
+      <Choice value="Brak Zaćmy"/>
+      <Choice value="Zaćma"/>
+    </Choices>
+  </View>
+
+<!-- Tabular data -->
+  <Header value="Kwestionariusz"/>
+  <Table name="form" value="$form"/>
+  <Header value="Notatka"/>
+  <Table name="notes" value="$notes"/>
+
+<!-- Images -->
+  <Header value="Lampa szczelinowa"/>
+  <Repeater on="$slitlamp" indexFlag="{{idx}}">
+    <Image name="slitlamp_{{idx}}" value="$slitlamp[{{idx}}].url" zoom="true" zoomControl="true"/>
+    <Choices name="slitlamp_quality_{{idx}}" toName="slitlamp_{{idx}}" choice="single" showInline="true">
+      <Choice value="Czytelne"/>
+      <Choice value="Zdjęcie nieczytelne"/>
+    </Choices>
+    <RectangleLabels name="slitlamp_bbox_{{idx}}" toName="slitlamp_{{idx}}">
+      <Label value="Obszar wskazujący" background="red"/>
+    </RectangleLabels>
+    <BrushLabels name="slitlamp_seg_{{idx}}" toName="slitlamp_{{idx}}">
+      <Label value="Obszar wskazujący" background="red"/>
+    </BrushLabels>
+  </Repeater>
+
+  <Header value="Smartfon"/>
+  <Repeater on="$smartphone" indexFlag="{{idx}}">
+    <Image name="smartphone_{{idx}}" value="$smartphone[{{idx}}].url" zoom="true" zoomControl="true"/>
+    <Choices name="smartphone_quality_{{idx}}" toName="smartphone_{{idx}}" choice="single" showInline="true">
+      <Choice value="Czytelne"/>
+      <Choice value="Zdjęcie nieczytelne"/>
+    </Choices>
+    <RectangleLabels name="smartphone_bbox_{{idx}}" toName="smartphone_{{idx}}">
+      <Label value="Obszar wskazujący" background="red"/>
+    </RectangleLabels>
+    <BrushLabels name="smartphone_seg_{{idx}}" toName="smartphone_{{idx}}">
+      <Label value="Obszar wskazujący" background="red"/>
+    </BrushLabels>
+  </Repeater>
+</View>
