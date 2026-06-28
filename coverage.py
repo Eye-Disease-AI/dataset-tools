@@ -1,13 +1,20 @@
+from logging import Logger
 import argparse, json, re
 import sys
 from collections import defaultdict
 from pathlib import Path
 import pandas as pd
+from PIL import Image, ExifTags
+
+DATETIME_ORIGINAL = next(k for k, v in ExifTags.TAGS.items() if v == 'DateTimeOriginal')
+IMG_EXTS = {'.jpg', '.jpeg', '.png', '.heic'}
 
 NOUNS = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
 PATIENT_RE = re.compile(r'(\w+)-(\w+)')
 TIME_RE = re.compile(r'(\d{2})-(\d{2})')
+
+logger = Logger("coverage")
 
 def iso(s):
     m = DATE.search(s)
@@ -81,27 +88,60 @@ def matching_slot(date, hhmm):
 
 for f in root.glob('zdjecia/*/*'):
     if not f.is_file():
+        logger.warning(f"Missing file: {f}")
         continue
     date = iso(f.parts[-2])
     if not date:
+        logger.warning(f"File missing date in name: {f}")
         continue
     date_covered['zdjecia'].add(date)
 
     hhmm = photo_time(f.stem)
     if hhmm is None:
+        logger.warning(f"Failed to extract date from file: {f}")
         continue
 
     slot_time = matching_slot(date, hhmm)
     if slot_time is None:
+        logger.warning(f"Error in finding matching slot for time {hhmm} for file: {f}")
         continue
 
     if slot_time == '-':
+        logger.info(f"No matching slot for file: {f}")
         continue
+
     for patient in ids[date][slot_time]:
         add_coverage('zdjecia', date, patient)
 
+def exif_capture(path):
+    """(date, hhmm) from EXIF DateTimeOriginal ('YYYY:MM:DD HH:MM:SS'). (None, None) on miss."""
+    try:
+        exif = Image.open(path)._getexif() or {}
+    except Exception:
+        return None, None
+    raw = exif.get(DATETIME_ORIGINAL)
+    if not raw or len(raw) < 16:
+        return None, None
+    return raw[:10].replace(':', '-'), raw[11:16]
 
-types = ['kwestionariusze', 'zakresy', 'notatki', 'kalendarze', 'zdjecia']
+for f in root.glob('smartfon/**/*'):
+    if not f.is_file() or f.suffix.lower() not in IMG_EXTS:
+        logger.warning(f"Error in finding matching slot for time {hhmm} for file: {f}")
+        continue
+    date, hhmm = exif_capture(f)
+    if not date:
+        logger.warning(f"Failed to extract date from file: {f}")
+        continue
+    date_covered['smartfon'].add(date)
+    slot_time = matching_slot(date, hhmm)
+    if slot_time is None or slot_time == '-':
+        logger.info(f"No matching slot for file: {f}")
+        continue
+    for patient in ids[date][slot_time]:
+        add_coverage('smartfon', date, patient)
+
+
+types = ['kwestionariusze', 'zakresy', 'notatki', 'kalendarze', 'zdjecia', 'smartfon']
 keys = sorted({(patient, date) for t in coverage.values() for date, ps in t.items() for patient in ps})
 
 rows = []
