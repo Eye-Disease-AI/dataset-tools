@@ -157,16 +157,19 @@ for patient, date in keys:
         elif coverage[type][date]: row[type] = ''
         elif date in date_covered[type]: row[type] = '?'
         else: row[type] = ''
-    if args.all:
-        rows.append(row)
-    elif not all(row[type] for type in types):
-        rows.append(row) # only print rows with missing data
+    rows.append(row)
 
-
-df = pd.DataFrame(rows)
+full = pd.DataFrame(rows)
+df = full if args.all else full[~full[types].ne('').all(axis=1)]  # default: rows with missing data
 holes = df[df[types].eq('').any(axis=1)]
 df = df.sort_values('date')
 with open(args.out, "w") as f:
     df.to_csv(f, index=False)
 print(df.to_string(index=False))
 print(f"\n{len(holes)} holes (' ' = missing, ? = type has the date but no patient attribution)")
+
+n_patients = full.loc[full['patient'] != 'unknown', 'patient'].nunique()
+print(f"\n{n_patients} identified patients, {len(full)} visits")
+print("coverage per column (% of patient-visits with '+'):")
+for type in types:
+    print(f"  {type:16} {full[type].eq('+').mean() * 100:5.1f}%")
