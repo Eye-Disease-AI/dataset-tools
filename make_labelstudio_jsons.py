@@ -27,7 +27,10 @@ def notes_values(root: Path, visit: dict, pid: str, initials: str) -> dict:
 
 def slitlamp(visit: dict) -> list[dict]:
     s = [{'url': f'{URL_PREFIX}{rel}'} for rel in visit.get('slitlamp', [])]
-    print(s)
+    return s
+
+def smartphone(visit: dict) -> list[dict]:
+    s = [{'url': f'{URL_PREFIX}{rel}'} for rel in visit.get('smartphone', [])]
     return s
 
 def visit_task(root: Path, pid: str, initials: str, visit: dict) -> dict:
@@ -37,7 +40,7 @@ def visit_task(root: Path, pid: str, initials: str, visit: dict) -> dict:
         'date': visit['date'],
         'time': visit['time'],
         'slitlamp': slitlamp(visit),
-        #'smarthpone': slitlamp(visit),
+        'smarthpone': smartphone(visit),
         'form': form_values(root, visit, pid, initials),
         'notes': notes_values(root, visit, pid, initials),
     }}
