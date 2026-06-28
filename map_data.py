@@ -126,7 +126,7 @@ def resolve_smartphone(root, ids):
                    else f'no slot for capture at {hhmm} on {date}')
             yield None, f, why
             continue
-        yield (pid, initials, date, slot_time, 'smartfon', f), None, None
+        yield (pid, initials, date, slot_time, 'smartphone', f), None, None
 
 
 def build_mapping(root, ids):
@@ -136,7 +136,7 @@ def build_mapping(root, ids):
     pid_initials = {}
     unresolved = []
 
-    multi_types = {'slitlamp', 'smartfon'}
+    multi_types = {'slitlamp', 'smartphone'}
 
     sources = [
         resolve_form_or_note(root, 'formularze/*/kwestionariusze/*.jpg', -3, 'form', ids),
