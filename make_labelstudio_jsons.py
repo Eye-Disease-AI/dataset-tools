@@ -40,7 +40,7 @@ def visit_task(root: Path, pid: str, initials: str, visit: dict) -> dict:
         'date': visit['date'],
         'time': visit['time'],
         'slitlamp': slitlamp(visit),
-        'smarthpone': smartphone(visit),
+        'smartphone': smartphone(visit),
         'form': form_values(root, visit, pid, initials),
         'notes': notes_values(root, visit, pid, initials),
     }}
