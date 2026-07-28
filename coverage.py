@@ -50,7 +50,7 @@ def add_coverage(type, date, patient):
 
 # Formularze
 for sub in ('kwestionariusze', 'zakresy'):
-    for f in root.glob(f'formularze/*/{sub}/*.jpg'):
+    for f in root.glob(f'formularze/*/{sub}/*'):
         date = iso(f.parts[-3])
         if date and (patient := get_patient(f.stem)):
             add_coverage(sub, date, patient)
