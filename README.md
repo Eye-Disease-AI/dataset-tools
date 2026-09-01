@@ -22,6 +22,10 @@ Steps:
     ```console
     uv run  coverage.py data/
     ```
+1. dataset statistics
+    ```console
+    uv run  stats.py data/
+    ```
 1. preview Label Studio tasks, then write them
     ```console
     uv run  make_labelstudio_jsons.py data/
@@ -40,6 +44,7 @@ Steps:
 - assign_ids.py: Make a patient unique ID mapping
 - map_data.py: map all available data to known patients
 - coverage.py: show what is missing per patient per day
+- stats.py: dataset size, per-type coverage, questionnaire answer distributions
 - make_labelstudio_jsons.py: build Label Studio import tasks (one per visit) from mapping.json
 - zipencrypt.py: make an encrypted zip
 - zipsync.sh: sync zips to a wireguard remote
