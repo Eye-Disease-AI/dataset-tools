@@ -23,7 +23,8 @@ def form_values(root: Path, visit: dict, pid: str, initials: str) -> dict:
 
 
 def notes_values(root: Path, visit: dict, pid: str, initials: str) -> dict:
-    return {}
+    s = {'url': f'{URL_PREFIX}{visit.get('notes', None)}'}
+    return s
 
 def slitlamp(visit: dict) -> list[dict]:
     s = [{'url': f'{URL_PREFIX}{rel}'} for rel in visit.get('slitlamp', [])]

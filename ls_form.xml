@@ -16,10 +16,11 @@
 <!-- Tabular data -->
   <Header value="Kwestionariusz"/>
   <Table name="form" value="$form"/>
-  <Header value="Notatka"/>
-  <Table name="notes" value="$notes"/>
 
 <!-- Images -->
+  <Header value="Notatka"/>
+  <Image name="notes" value="$notes.url"/>
+
   <Header value="Lampa szczelinowa"/>
   <Repeater on="$slitlamp" indexFlag="{{idx}}">
     <Image name="slitlamp_{{idx}}" value="$slitlamp[{{idx}}].url" zoom="true" zoomControl="true"/>
