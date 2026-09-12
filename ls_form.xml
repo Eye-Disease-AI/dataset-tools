@@ -18,8 +18,10 @@
   <Table name="form" value="$form"/>
 
 <!-- Images -->
-  <Header value="Notatka"/>
-  <Image name="notes" value="$notes.url"/>
+  <Repeater on="$notes" indexFlag="{{idx}}">
+    <Header value="Notatka"/>
+    <Image name="notes_{{idx}}" value="$notes[{{idx}}].url"/>
+  </Repeater>
 
   <Header value="Lampa szczelinowa"/>
   <Repeater on="$slitlamp" indexFlag="{{idx}}">
