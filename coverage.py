@@ -79,12 +79,12 @@ def photo_time(stem):
     return f'{time_match.group(1)}:{time_match.group(2)}'
 
 def matching_slot(date, hhmm):
-    """Last visit slot on `date` whose start <= hhmm. None if photo is before all visits."""
-    slots = ids.get(date, {})
-    candidate_times = [t for t in slots if t <= hhmm]
-    if not candidate_times:
+    """Matching slot on date, either hhmm is in slot, or if there is none, the closest slot.""" 
+    times = [t for t in ids.get(date, {}) if t != '-']
+    if not times:
         return None
-    return max(candidate_times)
+    started = [t for t in times if t <= hhmm]
+    return max(started) if started else min(times)
 
 for f in root.glob('zdjecia/*/*'):
     if not f.is_file():

@@ -8,6 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 DATA_TYPES = {'kwestionariusz', 'zakres', 'zakresy', 'notatka'}
+IMG_EXTS = {'.jpg', '.jpeg', '.png', '.heic'}
 DATE = re.compile(r'(\d{2})[.\-_](\d{2})[.\-_](\d{4})|(\d{4})-(\d{2})-(\d{2})')
 PID_RE = re.compile(r'p\d+')
 
@@ -53,12 +54,16 @@ def load_calendars(data_root):
 def collect_file_initials(data_root):
     """Set of (initials, date) from formularze + notatki filenames."""
     pairs = set()
-    for f in data_root.glob('formularze/**/*.jpg'):
+    for f in data_root.glob('formularze/**/*'):
+        if f.suffix.lower() not in IMG_EXTS:
+            continue
         date = iso(f.parts[-3])
         initials = find_initials_in_stem(f.stem)
         if date and initials:
             pairs.add((initials, date))
-    for f in data_root.glob('notatki/**/*.[pP][nN][gG]'):
+    for f in data_root.glob('notatki/**/*'):
+        if f.suffix.lower() not in IMG_EXTS:
+            continue
         date = iso(f.parts[-2])
         initials = find_initials_in_stem(f.stem)
         if date and initials:

@@ -36,20 +36,20 @@ def photo_time(stem):
 def slot_for_initials(ids, date, initials):
     """Find (slot_time, pid) for initials on date. (None, None) on miss or ambiguity."""
     slots = ids.get(date, {})
-    hits = [(t, slot[initials]) for t, slot in slots.items()
-            if initials in slot and t != '-']
+    hits = [(t, slot[initials]) for t, slot in slots.items() if initials in slot]
     if len(hits) != 1:
         return None, None
     return hits[0]
 
 
 def slot_for_time(ids, date, hhmm):
-    """Last slot on date whose start <= hhmm. (None, None, None) on miss."""
+    """Last slot on date whose start <= hhmm. Closest slot if its out of bounds"""
     slots = ids.get(date, {})
-    candidate_times = [t for t in slots if t <= hhmm and t != '-']
-    if not candidate_times:
+    times = [t for t in slots if t != '-']
+    if not times:
         return None, None, None
-    chosen = max(candidate_times)
+    started = [t for t in times if t <= hhmm]
+    chosen = max(started) if started else min(times)
     initials, pid = next(iter(slots[chosen].items()))
     return chosen, initials, pid
 
@@ -57,6 +57,8 @@ def slot_for_time(ids, date, hhmm):
 def resolve_form_or_note(root, pattern, date_idx, ftype, ids):
     """Yield (pid, initials, date, slot_time, ftype, path) for each resolvable file."""
     for f in root.glob(pattern):
+        if f.suffix.lower() not in IMG_EXTS:
+            continue
         date_match = DATE_RE.search(f.parts[date_idx])
         if not date_match:
             yield None, f, 'bad folder date'
@@ -139,9 +141,9 @@ def build_mapping(root, ids):
     multi_types = {'slitlamp', 'smartphone'}
 
     sources = [
-        resolve_form_or_note(root, 'formularze/*/kwestionariusze/*.jpg', -3, 'form', ids),
-        resolve_form_or_note(root, 'formularze/*/zakresy/*.jpg', -3, 'form_scope', ids),
-        resolve_form_or_note(root, 'notatki/*/*.[pP][nN][gG]', -2, 'notes', ids),
+        resolve_form_or_note(root, 'formularze/*/kwestionariusze/*', -3, 'form', ids),
+        resolve_form_or_note(root, 'formularze/*/zakresy/*', -3, 'form_scope', ids),
+        resolve_form_or_note(root, 'notatki/*/*', -2, 'notes', ids),
         resolve_photo(root, ids),
         resolve_smartphone(root, ids),
     ]
